@@ -22,6 +22,10 @@ if(OPENMP_FOUND)
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
 endif()
 
+# PyTorch Inference dependencies
+set(CMAKE_PREFIX_PATH "../pytorch_cpp_inference/libs/libtorch/share/cmake/Torch")
+find_package(Torch REQUIRED)
+
 # Defining the package
 catkin_package(
     INCLUDE_DIRS include
@@ -46,7 +50,8 @@ include_directories(
     include
     ${catkin_INCLUDE_DIRS}
     ${OpenCV_INCLUDE_DIRS}
-    ${Boost_INCLUDE_DIRS})
+    ${Boost_INCLUDE_DIRS}
+    ${Torch_INCLUDE_DIRS})
 
 # Description Library
 add_library(description_htmap
@@ -54,7 +59,8 @@ add_library(description_htmap
     src/imgdesc/KeypointDescriptor.cpp
     src/imgdesc/GlobalDescriptor.cpp
     src/imgdesc/ldb.cpp)
-target_link_libraries(description_htmap ${catkin_LIBRARIES} ${OpenCV_LIBRARIES})
+target_link_libraries(description_htmap ${catkin_LIBRARIES} ${OpenCV_LIBRARIES} ${TORCH_LIBRARIES})
+set_property(TARGET description_htmap PROPERTY CXX_STANDARD 17)
 
 # HTMap Library
 set(HTMAP_SRCS
@@ -68,8 +74,10 @@ set(HTMAP_SRCS
     src/HTMap.cpp
 )
 add_library(htmap ${HTMAP_SRCS})
-target_link_libraries(htmap description_htmap ${catkin_LIBRARIES} ${OpenCV_LIBRARIES} ${Boost_LIBRARIES})
+target_link_libraries(htmap description_htmap ${catkin_LIBRARIES} ${OpenCV_LIBRARIES} ${Boost_LIBRARIES} ${TORCH_LIBRARIES})
+set_property(TARGET htmap PROPERTY CXX_STANDARD 17)
 
 # HTMap Node
 add_executable(htmap_node src/nodes/HTMap_node.cpp)
-target_link_libraries(htmap_node htmap)
+target_link_libraries(htmap_node htmap ${OpenCV_LIBRARIES})
+set_property(TARGET htmap_node PROPERTY CXX_STANDARD 17)

@@ -19,6 +19,34 @@
 
 #include "htmap/HTMap.h"
 
+void printMatDetails(cv::Mat mat, std::string desc="Matrix") {
+  std::string typeString;
+  int type = mat.type();
+
+  uchar depth = type & CV_MAT_DEPTH_MASK;
+  uchar chans = 1 + (type >> CV_CN_SHIFT);
+
+  switch ( depth ) {
+    case CV_8U:  typeString = "8U"; break;
+    case CV_8S:  typeString = "8S"; break;
+    case CV_16U: typeString = "16U"; break;
+    case CV_16S: typeString = "16S"; break;
+    case CV_32S: typeString = "32S"; break;
+    case CV_32F: typeString = "32F"; break;
+    case CV_64F: typeString = "64F"; break;
+    default:     typeString = "User"; break;
+  }
+
+  typeString += "C";
+  typeString += (chans+'0');
+
+  double min, max;
+  cv::minMaxLoc(mat, &min, &max);
+
+  printf("%s: %s %dx%d [%.2f, %.2f]\n", desc.c_str(), typeString.c_str(), mat.cols, mat.rows, min, max);
+
+}
+
 namespace htmap
 {
 
@@ -178,6 +206,7 @@ void HTMap::describeImages(std::vector<std::string>& images)
 
             _st->registerDescTimes(ptime, ftime, ltime);
 
+            // printMatDetails(gdsc, "gDesc after convert");
             ROS_INFO("%lu keypoints found.", kps.size());
 
             Image curr_image;
@@ -274,13 +303,14 @@ bool HTMap::isNewLocation(const Image& img, HighLevelMap& map)
     // If we achive the maximum number of images in a node.
     if (loc->numImages() > _params->loc_max_images)
     {
+        ROS_INFO("Number imgs for location exceeded: %d > %d", loc->numImages(), _params->loc_max_images);
         return true;
     }
 
     double dist = GlobalDescriptor::dist(loc->desc, img.gdsc, _params->gdescriptor);
-	//ROS_INFO("Distance %f", dist);
     if (dist > _params->max_sim_newnode)
     {
+        ROS_INFO("Embedding distance exceeded threshold: %.2f > %.2f", dist, _params->max_sim_newnode);
         return true;
     }
     else

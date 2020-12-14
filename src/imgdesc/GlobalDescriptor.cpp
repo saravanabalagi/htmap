@@ -261,10 +261,68 @@ void PHOGDescriptor::describe(const cv::Mat& image, cv::Mat& desc)
     desc = desc / sum;
 }
 
+void RESNETDescriptor::setupDevice() {
+    if (torch::cuda::is_available()) {
+        std::cout << "CUDA is available! Describing images using GPU" << std::endl;
+        device = torch::kCUDA;
+    } else device = torch::kCPU;
+}
+
+void RESNETDescriptor::loadModel() {
+    std::string modelPath = "/fastscratch/compsci/sarav/projects/c/place_recognition/src/pytorch_cpp_inference/models/20201125132039_add_sigmoid_to_embeddings.pth";
+    model = torch::jit::load(modelPath);
+    model.to(device);
+    model.eval();
+    std::cout << "Loaded model successfully" << std::endl;
+}
+
+void RESNETDescriptor::readImg(std::string imgPath, cv::Mat& img) {
+  img = cv::imread(imgPath);
+  cv::cvtColor(img, img, cv::COLOR_BGR2RGB);
+}
+
+void RESNETDescriptor::resizeNormalizeImg(const cv::Mat& img, cv::Mat& out) {
+  int img_h = 224, img_w = 224;
+  if(img.rows == img_h && img.cols == img_w) {
+      out = img;
+      return;
+  }
+  out = cv::Mat(img_h, img_w, CV_8UC3);
+  cv::resize(img, out, out.size(), cv::INTER_AREA);
+  out.convertTo(out, CV_32F);
+  out -= cv::Scalar(70.370258669401, 74.122797553143, 73.178495195211);   // Subtract mean
+//   out /= cv::Scalar(51.644749102296, 51.515240911425, 52.277554279530);   // Divide Std
+  cv::Mat channels[3];
+  cv::split(out, channels);
+  channels[0] /= 51.644749102296;
+  channels[1] /= 51.515240911425;
+  channels[2] /= 52.277554279530;
+  std::vector<cv::Mat> imgChannels = {channels[0], channels[1], channels[2]};
+  cv::merge(imgChannels, out);
+  return;
+}
+
+void RESNETDescriptor::getInputTensor(const cv::Mat& img, torch::Tensor& out) {
+  out = torch::from_blob(img.data, {1, img.rows, img.cols, img.channels()}, at::kByte);
+  out = out.permute(torch::IntList({0, 3, 1, 2}));    // Channel first ordering for torch
+  out = out.toType(torch::kFloat32);                  // Covert uint8 to float32
+  out = out.contiguous();                             // Make contiguous for torch.view()
+}
+
+void RESNETDescriptor::describe(const cv::Mat& img, cv::Mat& desc) {
+    cv::Mat imgResized; resizeNormalizeImg(img, imgResized);
+    torch::Tensor inputTensor; getInputTensor(imgResized, inputTensor);
+    torch::NoGradGuard no_grad;
+    torch::Tensor output = model.forward({inputTensor.to(device)}).toTensor().detach().to(cpu);    // If model has 1 output
+    desc = cv::Mat(1, 2048, CV_32F, output.data_ptr()).clone();
+}
+
 double GlobalDescriptor::dist(const cv::Mat& a, const cv::Mat& b, GlobalDescriptor *desc)
 {
     double response;
-    if (desc->getType() == GDESCRIPTOR_WISIFT || desc->getType() == GDESCRIPTOR_WISURF)
+    if (desc->getType() == GDESCRIPTOR_WISIFT || 
+        desc->getType() == GDESCRIPTOR_WISURF || 
+        desc->getType() == GDESCRIPTOR_RESNET)
     {
         response = distEuclidean(a, b);
     }
@@ -308,6 +366,10 @@ GlobalDescriptor* GlobalDescriptor::create(const std::string& name, const Global
     else if (name == "PHOG")
     {
         desc = new PHOGDescriptor(params);
+    }
+    else if (name == "RESNET")
+    {
+        desc = new RESNETDescriptor(params);
     }
 
     return desc;

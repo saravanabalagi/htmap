@@ -20,6 +20,8 @@
 #ifndef _GLOBALDESCRIPTOR_H_
 #define _GLOBALDESCRIPTOR_H_
 
+#include <torch/torch.h>
+#include <torch/script.h>
 #include <opencv2/opencv.hpp>
 #include <opencv2/xfeatures2d.hpp>
 
@@ -35,7 +37,8 @@ enum GlobalDescriptorType
     GDESCRIPTOR_WISURF,
     GDESCRIPTOR_BRIEFGIST,
     GDESCRIPTOR_WILDB,
-    GDESCRIPTOR_PHOG
+    GDESCRIPTOR_PHOG,
+    GDESCRIPTOR_RESNET,
 };
 
 // ---
@@ -174,6 +177,35 @@ class PHOGDescriptor : public GlobalDescriptor
 
 private:
     void getHistogram(const cv::Mat& edges, const cv::Mat& ors, const cv::Mat& mag, int startX, int startY, int width, int height, cv::Mat& hist);
+};
+
+class RESNETDescriptor : public GlobalDescriptor
+{
+    public:
+        void readImg(std::string, cv::Mat&);
+        RESNETDescriptor(const GlobalDescriptorParams& params) :
+            GlobalDescriptor(GDESCRIPTOR_RESNET, 2048), // 2048 embedding size
+            device(torch::kCPU), cpu(torch::kCPU)
+    {
+            parseParameters(params);
+            setupDevice();
+            loadModel();
+    }
+
+    void parseParameters(const GlobalDescriptorParams& params)
+    {
+    }
+
+    void describe(const cv::Mat& image, cv::Mat& desc);
+
+    private:
+        torch::Device cpu;
+        torch::Device device;
+        torch::jit::script::Module model;
+        void loadModel();
+        void setupDevice();
+        void resizeNormalizeImg(const cv::Mat&, cv::Mat&);
+        void getInputTensor(const cv::Mat&, torch::Tensor&);
 };
 
 }
